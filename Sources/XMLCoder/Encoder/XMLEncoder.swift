@@ -232,6 +232,8 @@ open class XMLEncoder {
 
     public typealias XMLNodeEncoderClosure = (CodingKey) -> NodeEncoding?
     public typealias XMLEncodingClosure = (Encodable.Type, Encoder) -> XMLNodeEncoderClosure
+    
+    public typealias CDataWrapperResolver = (String) -> Bool
 
     /// Set of strategies to use for encoding of nodes.
     public enum NodeEncodingStrategy {
@@ -261,6 +263,27 @@ open class XMLEncoder {
             }
             return dynamicType.nodeEncoding(for:)
         }
+    }
+    
+    public enum CDataKeyWrapperResolver {
+        /// Defer to `Encoder` for choosing an encoding. This is the default strategy.
+        case deferredToEncoder
+        
+        /// Return a closure computing the desired node wraping solution for the value by its coding key.
+        case custom(CDataWrapperResolver)
+        
+        
+        var resolver: CDataWrapperResolver {
+            switch self {
+            case .custom(let resolver): return resolver
+            case .deferredToEncoder: return Self.defaultEncoder
+            }
+        }
+        
+        static let defaultEncoder: CDataWrapperResolver = { _ in
+            false
+        }
+        
     }
 
     /// Characters and their escaped representations to be escaped in attributes
@@ -301,6 +324,9 @@ open class XMLEncoder {
 
     /// The strategy to use in encoding encoding attributes. Defaults to `.deferredToEncoder`.
     open var nodeEncodingStrategy: NodeEncodingStrategy = .deferredToEncoder
+    
+    /// The strategy to use in encoding to resolve wrap it to CDATA tag or no. Defaults to `.deferredToEncoder`.
+    open var CDataKeyWrapperStrategy: CDataKeyWrapperResolver = .deferredToEncoder
 
     /// The strategy to use in encoding strings. Defaults to `.deferredToString`.
     open var stringEncodingStrategy: StringEncodingStrategy = .deferredToString
@@ -369,21 +395,21 @@ open class XMLEncoder {
         if let keyedBox = topLevel as? KeyedBox {
             elementOrNone = XMLCoderElement(
                 key: rootKey,
-                isStringBoxCDATA: isStringBoxCDATA,
-                box: keyedBox,
+                CDATAResolver: CDataKeyWrapperStrategy.resolver,
+                keyedBox: keyedBox,
                 attributes: attributes
             )
         } else if let unkeyedBox = topLevel as? UnkeyedBox {
             elementOrNone = XMLCoderElement(
                 key: rootKey,
-                isStringBoxCDATA: isStringBoxCDATA,
+                CDATAResolver: CDataKeyWrapperStrategy.resolver,
                 box: unkeyedBox,
                 attributes: attributes
             )
         } else if let choiceBox = topLevel as? ChoiceBox {
             elementOrNone = XMLCoderElement(
                 key: rootKey,
-                isStringBoxCDATA: isStringBoxCDATA,
+                CDATAResolver: CDataKeyWrapperStrategy.resolver,
                 box: choiceBox,
                 attributes: attributes
             )

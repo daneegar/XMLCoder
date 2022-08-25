@@ -34,6 +34,14 @@ final class CDATATest: XCTestCase {
         let string: String
         let int: Int
         let bool: Bool
+        let commonString: String
+        
+        enum CodingKeys: String, CodingKey {
+            case string
+            case int
+            case bool
+            case commonString
+        }
     }
 
     private let expectedCData =
@@ -42,15 +50,20 @@ final class CDATATest: XCTestCase {
             <string><![CDATA[string]]></string>
             <int>123</int>
             <bool>true</bool>
+            <commonString>commonString</commonString>
         </CData>
         """
 
     func testCDataTypes() throws {
-        let example = CData(string: "string", int: 123, bool: true)
+        let example = CData(string: "string", int: 123, bool: true, commonString: "commonString")
         let xmlEncoder = XMLEncoder()
-        xmlEncoder.stringEncodingStrategy = .cdata
+        xmlEncoder.CDataKeyWrapperStrategy = .custom({ key in
+            key == CData.CodingKeys.string.rawValue
+        })
         xmlEncoder.outputFormatting = .prettyPrinted
         let encoded = try xmlEncoder.encode(example)
-        XCTAssertEqual(String(data: encoded, encoding: .utf8), expectedCData)
+        let result = String(data: encoded, encoding: .utf8)
+        print(result!)
+        XCTAssertEqual(result, expectedCData)
     }
 }

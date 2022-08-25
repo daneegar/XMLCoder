@@ -10,6 +10,7 @@ import XCTest
 @testable import XMLCoder
 
 class XMLElementTests: XCTestCase {
+    
     func testInitNull() {
         let null = XMLCoderElement(key: "foo")
 
@@ -20,7 +21,7 @@ class XMLElementTests: XCTestCase {
     }
 
     func testInitUnkeyed() {
-        let keyed = XMLCoderElement(key: "foo", isStringBoxCDATA: false, box: UnkeyedBox())
+        let keyed = XMLCoderElement(key: "foo", CDATAResolver: XMLEncoder.CDataKeyWrapperResolver.deferredToEncoder.resolver, box: UnkeyedBox())
 
         XCTAssertEqual(keyed.key, "foo")
         XCTAssertNil(keyed.stringValue)
@@ -29,7 +30,7 @@ class XMLElementTests: XCTestCase {
     }
 
     func testInitKeyed() {
-        let keyed = XMLCoderElement(key: "foo", isStringBoxCDATA: false, box: KeyedBox(
+        let keyed = XMLCoderElement(key: "foo", CDATAResolver: XMLEncoder.CDataKeyWrapperResolver.deferredToEncoder.resolver, box: KeyedBox(
             elements: [] as [(String, Box)],
             attributes: [("baz", NullBox()), ("blee", IntBox(42))] as [(String, SimpleBox)]
         ))
@@ -41,7 +42,7 @@ class XMLElementTests: XCTestCase {
     }
 
     func testInitSimple() {
-        let keyed = XMLCoderElement(key: "foo", isStringBoxCDATA: false, box: StringBox("bar"))
+        let keyed = XMLCoderElement(key: "foo", CDATAResolver: XMLEncoder.CDataKeyWrapperResolver.deferredToEncoder.resolver, box: StringBox("bar"))
         let element = XMLCoderElement(stringValue: "bar")
 
         XCTAssertEqual(keyed.key, "foo")
@@ -51,7 +52,7 @@ class XMLElementTests: XCTestCase {
     }
 
     func testWhitespaceWithNoElements_keyed() {
-        let keyed = XMLCoderElement(key: "foo", isStringBoxCDATA: false, box: StringBox("bar"))
+        let keyed = XMLCoderElement(key: "foo", CDATAResolver: XMLEncoder.CDataKeyWrapperResolver.deferredToEncoder.resolver, box: StringBox("bar"))
         XCTAssertFalse(keyed.isWhitespaceWithNoElements())
     }
 

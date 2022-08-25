@@ -278,7 +278,7 @@ struct XMLCoderElement: Equatable {
         }
         var string = prefix
 
-        if !key.isEmpty {
+        if !key.isEmpty && !isCDATANode {
             string += "<\(key)"
             formatXMLAttributes(formatting, &string, escapedCharacters.attributes)
         }
@@ -291,7 +291,7 @@ struct XMLCoderElement: Equatable {
             formatXMLElements(escapedCharacters, formatting, indentation, &string, level, prettyPrintElements)
 
             if prettyPrintElements { string += prefix }
-            if !key.isEmpty {
+            if !key.isEmpty && !isCDATANode {
                 string += "</\(key)>"
             }
         } else {
@@ -307,66 +307,65 @@ struct XMLCoderElement: Equatable {
 // MARK: - Convenience Initializers
 
 extension XMLCoderElement {
-    init(key: String, isStringBoxCDATA isCDATA: Bool, box: UnkeyedBox, attributes: [Attribute] = []) {
-        if let containsChoice = box as? [ChoiceBox] {
+    init(key: String, CDATAResolver: (KeyedBox.Key) -> Bool, unkeyedBox: UnkeyedBox, attributes: [Attribute] = []) {
+        if let containsChoice = unkeyedBox as? [ChoiceBox] {
             self.init(
                 key: key,
                 elements: containsChoice.map {
-                    XMLCoderElement(key: $0.key, isStringBoxCDATA: isCDATA, box: $0.element)
+                    XMLCoderElement(key: $0.key, CDATAResolver: CDATAResolver, box: $0.element)
                 },
                 attributes: attributes
             )
         } else {
             self.init(
                 key: key,
-                elements: box.map { XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: $0) },
+                elements: unkeyedBox.map { XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: $0) },
                 attributes: attributes
             )
         }
     }
 
-    init(key: String, isStringBoxCDATA: Bool, box: ChoiceBox, attributes: [Attribute] = []) {
+    init(key: String, CDATAResolver: (KeyedBox.Key) -> Bool, choiceBox: ChoiceBox, attributes: [Attribute] = []) {
         self.init(
             key: key,
             elements: [
-                XMLCoderElement(key: box.key, isStringBoxCDATA: isStringBoxCDATA, box: box.element),
+                XMLCoderElement(key: choiceBox.key, CDATAResolver: CDATAResolver, box: choiceBox.element),
             ],
             attributes: attributes
         )
     }
 
-    init(key: String, isStringBoxCDATA isCDATA: Bool, box: KeyedBox, attributes: [Attribute] = []) {
+    init(key: String, CDATAResolver: (KeyedBox.Key) -> Bool, keyedBox: KeyedBox, attributes: [Attribute] = []) {
         var elements: [XMLCoderElement] = []
 
-        for (key, box) in box.elements {
+        for (key, box) in keyedBox.elements {
             let fail = {
                 preconditionFailure("Unclassified box: \(type(of: box))")
             }
-
             switch box {
             case let sharedUnkeyedBox as SharedBox<UnkeyedBox>:
                 let box = sharedUnkeyedBox.unboxed
                 elements.append(contentsOf: box.map {
-                    XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: $0)
+                    XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: $0)
                 })
             case let unkeyedBox as UnkeyedBox:
                 // This basically injects the unkeyed children directly into self:
                 elements.append(contentsOf: unkeyedBox.map {
-                    XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: $0)
+                    XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: $0)
                 })
             case let sharedKeyedBox as SharedBox<KeyedBox>:
                 let box = sharedKeyedBox.unboxed
-                elements.append(XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: box))
+                elements.append(XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: box))
             case let keyedBox as KeyedBox:
-                elements.append(XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: keyedBox))
+                elements.append(XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: keyedBox))
             case let simpleBox as SimpleBox:
-                elements.append(XMLCoderElement(key: key, isStringBoxCDATA: isCDATA, box: simpleBox))
+                elements.append(XMLCoderElement(key: key, CDATAResolver: CDATAResolver, box: simpleBox))
             default:
                 fail()
             }
         }
 
-        let attributes: [Attribute] = attributes + box.attributes.compactMap { key, box in
+        let attributes: [Attribute] = attributes + keyedBox.attributes.compactMap { key, box in
             guard let value = box.xmlString else {
                 return nil
             }
@@ -376,8 +375,8 @@ extension XMLCoderElement {
         self.init(key: key, elements: elements, attributes: attributes)
     }
 
-    init(key: String, isStringBoxCDATA: Bool, box: SimpleBox) {
-        if isStringBoxCDATA, let stringBox = box as? StringBox {
+    init(key: String, CDATAResolver: (KeyedBox.Key) -> Bool, box: SimpleBox) {
+        if CDATAResolver(key), let stringBox = box as? StringBox {
             self.init(key: key, cdataValue: stringBox.unboxed)
         } else if let value = box.xmlString {
             self.init(key: key, stringValue: value)
@@ -386,22 +385,22 @@ extension XMLCoderElement {
         }
     }
 
-    init(key: String, isStringBoxCDATA isCDATA: Bool, box: Box, attributes: [Attribute] = []) {
+    init(key: String, CDATAResolver: (KeyedBox.Key) -> Bool, box: Box, attributes: [Attribute] = []) {
         switch box {
         case let sharedUnkeyedBox as SharedBox<UnkeyedBox>:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: sharedUnkeyedBox.unboxed, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, unkeyedBox: sharedUnkeyedBox.unboxed, attributes: attributes)
         case let sharedKeyedBox as SharedBox<KeyedBox>:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: sharedKeyedBox.unboxed, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, box: sharedKeyedBox.unboxed, attributes: attributes)
         case let sharedChoiceBox as SharedBox<ChoiceBox>:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: sharedChoiceBox.unboxed, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, box: sharedChoiceBox.unboxed, attributes: attributes)
         case let unkeyedBox as UnkeyedBox:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: unkeyedBox, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, unkeyedBox: unkeyedBox, attributes: attributes)
         case let keyedBox as KeyedBox:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: keyedBox, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, keyedBox: keyedBox, attributes: attributes)
         case let choiceBox as ChoiceBox:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: choiceBox, attributes: attributes)
+            self.init(key: key, CDATAResolver: CDATAResolver, choiceBox: choiceBox, attributes: attributes)
         case let simpleBox as SimpleBox:
-            self.init(key: key, isStringBoxCDATA: isCDATA, box: simpleBox)
+            self.init(key: key, CDATAResolver: CDATAResolver, box: simpleBox)
         case let box:
             preconditionFailure("Unclassified box: \(type(of: box))")
         }
